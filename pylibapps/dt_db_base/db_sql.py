@@ -133,7 +133,7 @@ class sql_common(object):
         """
 
     def get_dev_last_result(self, dev_id, group_name, do_like=False):
-        cmp_str = f"test_groups.name LIKE '%{db_safe_str(group_name)}%'" \
+        cmp_str = f"test_groups.name LIKE '%%{db_safe_str(group_name)}%%'" \
             if do_like else f"test_groups.name = '{db_safe_str(group_name)}'"
         return f"""
         SELECT test_group_results.time_of_tests,
