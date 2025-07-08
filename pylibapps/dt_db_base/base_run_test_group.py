@@ -500,7 +500,6 @@ class base_run_group_manager(object):
             try:
                 return self.process_line(line)
             except Exception as e:
-                import traceback
                 self._logger.error("LINE PROCESS FAILED")
                 lines = traceback.format_exc().splitlines()
                 for line in lines:
