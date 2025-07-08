@@ -54,6 +54,12 @@ class test_desc_base:
         raise NotImplemented
 
 
+def crash_lines_to_log(line_logger):
+    lines = traceback.format_exc().splitlines()
+    for line in lines:
+        line_logger(line)
+
+
 class basic_test_desc(test_desc_base):
     def __init__(self, error_no, desc):
         self.desc = desc
@@ -359,8 +365,7 @@ def _thread_test(test_context):
                     for line in str(e).splitlines():
                         lib_inf.output_bad(line)
                     lib_inf.output_bad("Backtrace:")
-                    for line in traceback.format_exc().splitlines():
-                        lib_inf.output_bad(line)
+                    crash_lines_to_log(lib_inf.output_bad)
                     test_context.script_crash(name)
                     full_stop = True
 
@@ -396,6 +401,7 @@ def _thread_test(test_context):
         bus.close()
     except Exception as e:
         lib_inf.error_msg("Bus close failed.")
+        crash_lines_to_log(lib_inf.error_msg)
 
 _ANSI_ERR     = "\x1B[31m"
 _ANSI_GREEN   = "\x1B[32m"
@@ -501,9 +507,7 @@ class base_run_group_manager(object):
                 return self.process_line(line)
             except Exception as e:
                 self._logger.error("LINE PROCESS FAILED")
-                lines = traceback.format_exc().splitlines()
-                for line in lines:
-                    self._logger.error(line)
+                crash_lines_to_log(self._logger.error)
         else:
             self._logger.warning("Part line received, but timed out.")
         self.stop()
@@ -711,8 +715,7 @@ class base_run_group_manager(object):
         except Exception as e:
             msg = "BAD: FAILED to start: %s\n" % str(e)
             lib_inf.output_bad("Backtrace:")
-            for line in traceback.format_exc().splitlines():
-                lib_inf.output_bad(line)
+            crash_lines_to_log(lib_inf.output_bad)
             self.stop()
             self.live = True
             self.process_line(msg)
@@ -858,8 +861,7 @@ class default_group_context(base_run_group_context):
         except Exception as e:
             self._logger.error("Failed to get devices.")
             self._logger.error("Backtrace:")
-            for line in traceback.format_exc().splitlines():
-                self._logger.error(line)
+            crash_lines_to_log(self._logger.error)
             return []
 
     def stop_devices(self):
