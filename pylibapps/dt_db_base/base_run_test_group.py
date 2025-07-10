@@ -2,7 +2,9 @@ import os
 import sys
 import time
 import fcntl
+import shutil
 import select
+import tempfile
 import datetime
 import traceback
 import pickle
@@ -242,6 +244,10 @@ def _thread_test(test_context):
     lib_inf.output_normal("Starting test group: " + test_context.test_group)
     lib_inf.enable_info_msgs(info_enabled)
 
+    # Set messages to go over ICP
+    lib_inf.set_log_file(test_context.stdout_out)
+    lib_inf.set_output(test_context.stdout_out)
+
     exec_map = {'exit': test_context.forced_exit,
                 'output_normal' : lib_inf.output_normal,
                 'output_good' : lib_inf.output_good,
@@ -272,10 +278,6 @@ def _thread_test(test_context):
 
         if not len(ready_devices):
             lib_inf.error_msg("No devices")
-
-        # Set messages to go over ICP
-        lib_inf.set_log_file(test_context.stdout_out)
-        lib_inf.set_output(test_context.stdout_out)
 
         full_stop=False
 
@@ -396,11 +398,6 @@ def _thread_test(test_context):
 
             if full_stop:
                 break
-
-    # Renable any debug test logging for closing up bus, but send to stdout if set to do so.
-    lib_inf.enable_info_msgs(info_enabled)
-    lib_inf.set_log_file(None)
-    lib_inf.set_output(None)
     try:
         test_context.finished(bus_con)
     except Exception as e:
@@ -414,6 +411,7 @@ def _thread_test(test_context):
         lib_inf.error_msg(f"Bus close failed : {str(e)}")
         crash_lines_to_log(lib_inf.error_msg)
         test_context.script_crash()
+
 
 _ANSI_ERR     = "\x1B[31m"
 _ANSI_GREEN   = "\x1B[32m"
@@ -456,6 +454,7 @@ class base_run_group_manager(object):
 
         self.outfile = None
         self.logfile = None
+        self._pre_logfile = None
         self.files = []
 
         no_op = lambda x: None
@@ -545,8 +544,8 @@ class base_run_group_manager(object):
             self.outfile.close()
             self.outfile = None
         if self.logfile:
-            self.logfile.close()
-            self.logfile = None
+            self.logfile.flush() # Write what we have, bute capture any output afterwards.
+
         self.current_test = None
         self.current_device = None
 
@@ -566,13 +565,21 @@ class base_run_group_manager(object):
             self.session_results[self.current_device]['tests'][self.current_test]['outfile'] = outfile
 
     def _start_logfile(self, logfile):
+        if not len(logfile): # We never stop logging during testing.
+            return
         if self.logfile:
             self.logfile.close()
         self.logfile = None
-        if len(logfile):
+        # If it's the first, take any log messages that was before hand.
+        if self.logfile == self._pre_logfile:
+            self._pre_logfile.close()
+            shutil.move(self._pre_logfile.name, logfile)
+            self._pre_logfile = None
+            self.logfile = open(logfile, "a")
+        else:
             self.logfile = open(logfile, "w")
-            self.files += [logfile]
-            self.session_results[self.current_device]['tests'][self.current_test]['logfile'] = logfile
+        self.files += [logfile]
+        self.session_results[self.current_device]['tests'][self.current_test]['logfile'] = logfile
 
     def _test_status(self, args):
         args = args.split(' ')
@@ -588,8 +595,7 @@ class base_run_group_manager(object):
             self.outfile.close()
             self.outfile = None
         if self.logfile:
-            self.logfile.close()
-            self.logfile = None
+            self.logfile.flush() # Write what we have, but capture anything until the next test starts
 
     def _dev_status(self, passfail):
         self.session_results[self.current_device]['tests'][self.current_test]['passfail'] = passfail
@@ -651,9 +657,42 @@ class base_run_group_manager(object):
         return self.frozen and self.live
 
     def process_line(self, line):
+        def line_is_log(s):
+            return len(s) > 22 and \
+               s[2] == '/' and \
+               s[5] == ' ' and \
+               s[8] == ':' and \
+               s[22] == '['
+        def process_log_line(l):
+            try:
+                #23 = len("25/01 10:51:47.241291 [")
+                s = l.index(' ', 24)
+                s += 1
+                e = l.index(':', s)
+                token = l[s:e]
+            except:
+                token = ""
+            ansi = None
+            if token == "ERROR":
+                ansi = _ANSI_ERR
+                self.error_line(l)
+            elif token == "WARN":
+                ansi = _ANSI_WARN
+                self.warning_line(l)
+            else:
+                self.info_line(l)
+
+            if self.logfile:
+                self.logfile.write(l)
+
         if not self.live:
             if isinstance(line, bytes) and line.startswith(_IPC_CMD + b"START_TESTS"):
                 self.live = True
+            if self.logfile:
+                if isinstance(line, bytes):
+                    line = line.decode(errors='replace')
+                if line_is_log(line):
+                    process_log_line(line)
             return True
         if isinstance(line, bytes) and line.startswith(_IPC_CMD):
             line = line[len(_IPC_CMD):].strip()
@@ -673,32 +712,8 @@ class base_run_group_manager(object):
             if isinstance(line, bytes):
                 line = line.decode(errors='replace')
             ansi = None
-            if len(line) > 22 and \
-               line[2] == '/' and \
-               line[5] == ' ' and \
-               line[8] == ':' and \
-               line[22] == '[':
-                try:
-                    #23 = len("25/01 10:51:47.241291 [")
-                    s = line.index(' ', 24)
-                    s += 1
-                    e = line.index(':', s)
-                    token = line[s:e]
-                except:
-                    token = ""
-                ansi = None
-                if token == "ERROR":
-                    ansi = _ANSI_ERR
-                    self.error_line(line)
-                elif token == "WARN":
-                    ansi = _ANSI_WARN
-                    self.warning_line(line)
-                else:
-                    self.info_line(line)
-
-                if self.logfile:
-                    self.logfile.write(line)
-
+            if line_is_log(line):
+                process_log_line(line)
             else:
                 if line.startswith("Good: "):
                     ansi = _ANSI_GREEN
@@ -729,8 +744,16 @@ class base_run_group_manager(object):
 
             self.session_results = {}
 
+            if self._pre_logfile:
+                self._pre_logfile.close()
+                os.unlink(self._pre_logfile.name) # Just to be sure
+
+            self._pre_logfile = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete_on_close=False) # Place to put errors before tests start
+
+            self.logfile = self._pre_logfile
+
             test_results = {'tests' :
-                            dict([( test.name, {'passfail' : False } )
+                            dict([( test.name, {'passfail' : False, 'logfile' : None } )
                             for test in self.context.tests_group.tests])}
 
             for dev in self.context.devices:
@@ -757,23 +780,58 @@ class base_run_group_manager(object):
             self.context.release_bus()
             return False
 
+    def _clean_after_process(self):
+        self.process = None
+        self.last_end_time = time.time()
+        # Drain IPC
+        r = select.select([self.stdout_in],[],[], 0.01)
+        while r[0]:
+            self._stdout_in_event(None, None)
+            r = select.select([self.stdout_in],[],[], 0.01)
+        if self.logfile: # Nothing to log any more, the test process is now gone.
+            self.logfile.close()
+            self.logfile = None
+        self.context.release_bus()
+        if self._pre_logfile:
+            # Didn't even get to the first test
+            context = self.context
+            if len(context.devices) and len(self.context.tests_group.tests):
+                # These are DB devices, but the UUID and order should be the same.
+                # Put these logs on to first test
+                current_device = context.devices[0].uuid.rstrip('\0')
+                first_test = context.tests_group.tests[0]
+
+                stamp = datetime.datetime.utcnow()
+
+                filename = "%s_%s_%s_%s.log" % (self.test_context.test_group,
+                                              current_device,
+                                              first_test.name,
+                                              str(stamp))
+                filename = filename.replace('/', '_')
+
+                logfilepath = os.path.join(self.test_context.tmp_dir,
+                                       filename)
+
+                shutil.move(self._pre_logfile.name, logfilepath)
+                self._pre_logfile.close()
+                self._pre_logfile = None
+
+                tests_dict = self.session_results[current_device]['tests'][first_test.name]
+                self.files += [logfilepath]
+                tests_dict['logfile'] = logfilepath
+
 
     def wait_for_end(self):
         lib_inf = self._run_group_context_class.lib_inf
         self.live = False
         if self.process:
             self.process.join(4)
-            self.process = None
-            self.context.release_bus()
-
-        self.last_end_time = time.time()
+        self._clean_after_process()
         self.readonly = True
 
     def _complete_stop(self):
         self.test_context.stop_devices()
-        self.process = None
-        self.last_end_time = time.time()
-        self.context.release_bus()
+        self._clean_after_process()
         self.live = False # Should already be False, but concurrence means it could have changed before process stopped.
         self.frozen = False
 
