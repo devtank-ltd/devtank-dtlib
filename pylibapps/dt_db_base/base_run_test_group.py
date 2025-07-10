@@ -255,14 +255,16 @@ def _thread_test(test_context):
     try:
         bus_con = bus.open()
     except Exception as e:
-        lib_inf.error_msg("Bus open failed: " + str(e))
+        lib_inf.error_msg(f"Bus open failed: {str(e)}")
+        crash_lines_to_log(lib_inf.error_msg)
         bus_con = None
 
     if bus_con:
         try:
             ready_devices = test_context.get_ready_devices(bus_con)
         except Exception as e:
-            lib_inf.error_msg("Get devices failed")
+            lib_inf.error_msg(f"Get devices failed : {str(e)}")
+            crash_lines_to_log(lib_inf.error_msg)
             ready_devices = []
 
         if not len(ready_devices):
@@ -396,11 +398,16 @@ def _thread_test(test_context):
     lib_inf.enable_info_msgs(info_enabled)
     lib_inf.set_log_file(None)
     lib_inf.set_output(None)
-    test_context.finished(bus_con)
+    try:
+        test_context.finished(bus_con)
+    except Exception as e:
+        base_run_group_context.finished(test_context, None)
+        lib_inf.error_msg(f"Failed to finish with overloaded context.finish : {str(e)}")
+        crash_lines_to_log(lib_inf.error_msg)
     try:
         bus.close()
     except Exception as e:
-        lib_inf.error_msg("Bus close failed.")
+        lib_inf.error_msg(f"Bus close failed : {str(e)}")
         crash_lines_to_log(lib_inf.error_msg)
 
 _ANSI_ERR     = "\x1B[31m"
@@ -713,7 +720,7 @@ class base_run_group_manager(object):
             return True
 
         except Exception as e:
-            msg = "BAD: FAILED to start: %s\n" % str(e)
+            msg = f"BAD: FAILED to start: {str(e)}\n"
             lib_inf.output_bad("Backtrace:")
             crash_lines_to_log(lib_inf.output_bad)
             self.stop()
@@ -777,7 +784,7 @@ class base_run_group_manager(object):
                             local_file = self.context.db.get_file_to_local(f)
                             values[k] = local_file
                         except Exception as e:
-                            self.process_line("BAD: Failed to load session: %s\n" % str(e))
+                            self.process_line(f"BAD: Failed to load session: {str(e)}\n")
                             self.live = False
                             local_file = None
                     else:
