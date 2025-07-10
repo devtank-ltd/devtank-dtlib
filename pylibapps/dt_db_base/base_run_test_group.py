@@ -164,7 +164,8 @@ class base_run_group_context(object):
         if passfail:
             self.lib_inf.output_good(error_text)
         else:
-            results[test_name] = False
+            if test_name is not None: # This could be called by a child class, without a current test, like by script_crash
+                results[test_name] = False
             self.do_error_code(str(self.sub_test_count), error_num, error_text)
 
         self._complete_check(args, passfail, error_text)
@@ -215,7 +216,7 @@ class base_run_group_context(object):
         self.stdout_out.write(b"\n")
         self.stdout_out.flush()
 
-    def script_crash(self, filename):
+    def script_crash(self, filename=None):
         pass
 
     def sleep(self, seconds, silent=False):
@@ -257,6 +258,7 @@ def _thread_test(test_context):
     except Exception as e:
         lib_inf.error_msg(f"Bus open failed: {str(e)}")
         crash_lines_to_log(lib_inf.error_msg)
+        test_context.script_crash()
         bus_con = None
 
     if bus_con:
@@ -265,6 +267,7 @@ def _thread_test(test_context):
         except Exception as e:
             lib_inf.error_msg(f"Get devices failed : {str(e)}")
             crash_lines_to_log(lib_inf.error_msg)
+            test_context.script_crash()
             ready_devices = []
 
         if not len(ready_devices):
@@ -404,11 +407,13 @@ def _thread_test(test_context):
         base_run_group_context.finished(test_context, None)
         lib_inf.error_msg(f"Failed to finish with overloaded context.finish : {str(e)}")
         crash_lines_to_log(lib_inf.error_msg)
+        test_context.script_crash()
     try:
         bus.close()
     except Exception as e:
         lib_inf.error_msg(f"Bus close failed : {str(e)}")
         crash_lines_to_log(lib_inf.error_msg)
+        test_context.script_crash()
 
 _ANSI_ERR     = "\x1B[31m"
 _ANSI_GREEN   = "\x1B[32m"
@@ -608,8 +613,30 @@ class base_run_group_manager(object):
 
     def _store_value(self, name, value):
         if not self.current_device or not self.current_test:
-            return
-        test_dict = self.session_results[self.current_device]['tests'][self.current_test]
+            context = self.context
+            # If this is an error code, this could be useful in the DB.
+            if not len(context.devices) or not len(self.context.tests_group.tests):
+                return
+            # These are DB devices, but the UUID and order should be the same.
+
+            # Ok, so this is before/after the tests are run, so put in for first device
+            current_device = context.devices[0].uuid
+
+            # Use last test that ran
+            tests_dict = self.session_results[current_device]['tests']
+            current_test = None
+            for test in self.context.tests_group.tests:
+                if tests_dict[test.name]['logfile']:
+                    current_test = test.name
+                else:
+                    break
+            if not current_test:
+                # Just use first test
+                current_test = self.context.tests_group.tests[0].name
+        else:
+            current_device = self.current_device
+            current_test = self.current_test
+        test_dict = self.session_results[current_device]['tests'][current_test]
         test_dict.setdefault("stored_values", {})
         test_dict["stored_values"][name] = value
 
