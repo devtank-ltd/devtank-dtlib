@@ -121,7 +121,7 @@ class base_run_context(object):
         self.total_test_time = 0
         self.test_start_time = 0
 
-        self.last_test_result = None
+        self.last_test_result = False
 
         self.current_dev = None
         self.current_test = None
@@ -170,14 +170,17 @@ class base_run_context(object):
         for bar in self.progress_bars:
             bar.set_fraction(1)
 
-        if not len(self.run_group_man.session_results):
-            open_notify_gui(self.context, "No Results.\nNo Devices?")
+        test_list_store = self.test_list.get_model()
+        testfile = test_list_store[0]
+        if not testfile[1]:
+            open_notify_gui(self.context, "First test, no result\nNo Devices?\nHW failure?")
+            testfile[1] = self.context.get_pass_fail_icon_name(False)
 
         self.update_status_time()
         self._stop_update()
-        if self.last_test_result is not None:
-            self.update_info_status(self.last_test_result)
-            self.update_info_status_icon(self.last_test_result)
+
+        self.update_info_status(self.last_test_result)
+        self.update_info_status_icon(self.last_test_result)
 
     def select_testfile(self, select_testfile):
         test_list = self.test_list
@@ -292,10 +295,11 @@ class base_run_context(object):
         """ Updates the test info label on the logger window """
         if self.run_group_man.current_test is not None:
             self.current_test = self.run_group_man.current_test
-        self.number_of_tests = len(self.test_list.get_model())
-        current_test_number = 1 + self.tests.index(self.current_test)
-        self.info_status_label.set_text(f"({current_test_number}/{self.number_of_tests}) {self.current_test}")
-        self.info_status_spinner.start()
+            current_test_number = 1 + self.tests.index(self.current_test)
+            self.info_status_label.set_text(f"({current_test_number}/{len(self.tests)}) {self.current_test}")
+            self.info_status_spinner.start()
+        else:
+            self.info_status_label.set_text(f"(0/{len(self.tests)})")
 
     def update_info_status_icon(self, passfail=None):
         """ If passfail is none, reinstate the spinner,
@@ -334,6 +338,7 @@ class base_run_context(object):
         if self.update_id is None:
             self.update_id = GLib.timeout_add(250, self.update_progress)
 
+        self.last_test_result = False
         self.test_time = 0
         self.total_test_time = 0
         self.test_start_time = time.time()
