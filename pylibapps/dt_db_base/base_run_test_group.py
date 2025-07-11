@@ -368,11 +368,11 @@ def _thread_test(test_context):
                     duration = time.time() - start_time
                     results[name] = False
                     store_value("SUB_FAIL_N", "SCRIPT CRASH")
-                    lib_inf.output_bad("Exception:")
+                    lib_inf.error_msg("Exception:")
                     for line in str(e).splitlines():
-                        lib_inf.output_bad(line)
-                    lib_inf.output_bad("Backtrace:")
-                    crash_lines_to_log(lib_inf.output_bad)
+                        lib_inf.error_msg(line)
+                    lib_inf.error_msg("Backtrace:")
+                    crash_lines_to_log(lib_inf.error_msg)
                     test_context.script_crash(name)
                     full_stop = True
 
@@ -758,8 +758,8 @@ class base_run_group_manager(object):
 
         except Exception as e:
             msg = f"BAD: FAILED to start: {str(e)}\n"
-            lib_inf.output_bad("Backtrace:")
-            crash_lines_to_log(lib_inf.output_bad)
+            lib_inf.error_msg("Backtrace:")
+            crash_lines_to_log(lib_inf.error_msg)
             self.stop()
             self.live = True
             self.process_line(msg)
