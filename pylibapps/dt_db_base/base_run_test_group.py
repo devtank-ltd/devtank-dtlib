@@ -413,13 +413,6 @@ def _thread_test(test_context):
         test_context.script_crash()
 
 
-_ANSI_ERR     = "\x1B[31m"
-_ANSI_GREEN   = "\x1B[32m"
-_ANSI_WARN    = "\x1B[33m"
-_ANSI_DEFAULT = "\x1B[39m"
-
-
-
 class base_run_group_manager(object):
     def __init__(self, context,
                  _run_group_context_class,
@@ -672,12 +665,9 @@ class base_run_group_manager(object):
                 token = l[s:e]
             except:
                 token = ""
-            ansi = None
             if token == "ERROR":
-                ansi = _ANSI_ERR
                 self.error_line(l)
             elif token == "WARN":
-                ansi = _ANSI_WARN
                 self.warning_line(l)
             else:
                 self.info_line(l)
@@ -711,15 +701,12 @@ class base_run_group_manager(object):
         else:
             if isinstance(line, bytes):
                 line = line.decode(errors='replace')
-            ansi = None
             if line_is_log(line):
                 process_log_line(line)
             else:
                 if line.startswith("Good: "):
-                    ansi = _ANSI_GREEN
                     self.good_line(line)
                 elif line.startswith("BAD: "):
-                    ansi = _ANSI_ERR
                     self.bad_line(line)
                 else:
                     self.normal_line(line)
