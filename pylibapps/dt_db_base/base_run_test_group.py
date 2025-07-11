@@ -2,7 +2,9 @@ import os
 import sys
 import time
 import fcntl
+import shutil
 import select
+import tempfile
 import datetime
 import traceback
 import pickle
@@ -52,6 +54,12 @@ class test_desc_base:
 
     def get_error_no(self):
         raise NotImplemented
+
+
+def crash_lines_to_log(line_logger):
+    lines = traceback.format_exc().splitlines()
+    for line in lines:
+        line_logger(line)
 
 
 class basic_test_desc(test_desc_base):
@@ -158,7 +166,8 @@ class base_run_group_context(object):
         if passfail:
             self.lib_inf.output_good(error_text)
         else:
-            results[test_name] = False
+            if test_name is not None: # This could be called by a child class, without a current test, like by script_crash
+                results[test_name] = False
             self.do_error_code(str(self.sub_test_count), error_num, error_text)
 
         self._complete_check(args, passfail, error_text)
@@ -209,7 +218,7 @@ class base_run_group_context(object):
         self.stdout_out.write(b"\n")
         self.stdout_out.flush()
 
-    def script_crash(self, filename):
+    def script_crash(self, filename=None):
         pass
 
     def sleep(self, seconds, silent=False):
@@ -235,6 +244,10 @@ def _thread_test(test_context):
     lib_inf.output_normal("Starting test group: " + test_context.test_group)
     lib_inf.enable_info_msgs(info_enabled)
 
+    # Set messages to go over ICP
+    lib_inf.set_log_file(test_context.stdout_out)
+    lib_inf.set_output(test_context.stdout_out)
+
     exec_map = {'exit': test_context.forced_exit,
                 'output_normal' : lib_inf.output_normal,
                 'output_good' : lib_inf.output_good,
@@ -249,22 +262,22 @@ def _thread_test(test_context):
     try:
         bus_con = bus.open()
     except Exception as e:
-        lib_inf.error_msg("Bus open failed: " + str(e))
+        lib_inf.error_msg(f"Bus open failed: {str(e)}")
+        crash_lines_to_log(lib_inf.error_msg)
+        test_context.script_crash()
         bus_con = None
 
     if bus_con:
         try:
             ready_devices = test_context.get_ready_devices(bus_con)
         except Exception as e:
-            lib_inf.error_msg("Get devices failed")
+            lib_inf.error_msg(f"Get devices failed : {str(e)}")
+            crash_lines_to_log(lib_inf.error_msg)
+            test_context.script_crash()
             ready_devices = []
 
         if not len(ready_devices):
             lib_inf.error_msg("No devices")
-
-        # Set messages to go over ICP
-        lib_inf.set_log_file(test_context.stdout_out)
-        lib_inf.set_output(test_context.stdout_out)
 
         full_stop=False
 
@@ -355,12 +368,11 @@ def _thread_test(test_context):
                     duration = time.time() - start_time
                     results[name] = False
                     store_value("SUB_FAIL_N", "SCRIPT CRASH")
-                    lib_inf.output_bad("Exception:")
+                    lib_inf.error_msg("Exception:")
                     for line in str(e).splitlines():
-                        lib_inf.output_bad(line)
-                    lib_inf.output_bad("Backtrace:")
-                    for line in traceback.format_exc().splitlines():
-                        lib_inf.output_bad(line)
+                        lib_inf.error_msg(line)
+                    lib_inf.error_msg("Backtrace:")
+                    crash_lines_to_log(lib_inf.error_msg)
                     test_context.script_crash(name)
                     full_stop = True
 
@@ -386,22 +398,19 @@ def _thread_test(test_context):
 
             if full_stop:
                 break
-
-    # Renable any debug test logging for closing up bus, but send to stdout if set to do so.
-    lib_inf.enable_info_msgs(info_enabled)
-    lib_inf.set_log_file(None)
-    lib_inf.set_output(None)
-    test_context.finished(bus_con)
+    try:
+        test_context.finished(bus_con)
+    except Exception as e:
+        base_run_group_context.finished(test_context, None)
+        lib_inf.error_msg(f"Failed to finish with overloaded context.finish : {str(e)}")
+        crash_lines_to_log(lib_inf.error_msg)
+        test_context.script_crash()
     try:
         bus.close()
     except Exception as e:
-        lib_inf.error_msg("Bus close failed.")
-
-_ANSI_ERR     = "\x1B[31m"
-_ANSI_GREEN   = "\x1B[32m"
-_ANSI_WARN    = "\x1B[33m"
-_ANSI_DEFAULT = "\x1B[39m"
-
+        lib_inf.error_msg(f"Bus close failed : {str(e)}")
+        crash_lines_to_log(lib_inf.error_msg)
+        test_context.script_crash()
 
 
 class base_run_group_manager(object):
@@ -438,6 +447,7 @@ class base_run_group_manager(object):
 
         self.outfile = None
         self.logfile = None
+        self._pre_logfile = None
         self.files = []
 
         no_op = lambda x: None
@@ -500,10 +510,8 @@ class base_run_group_manager(object):
             try:
                 return self.process_line(line)
             except Exception as e:
-                self._logger.error("LINE PROCESS FAILED")
-                lines = traceback.format_exc().splitlines()
-                for line in lines:
-                    self._logger.error(line)
+                self._logger.error(f"LINE PROCESS FAILED : {str(e)}")
+                crash_lines_to_log(self._logger.error)
         else:
             self._logger.warning("Part line received, but timed out.")
         self.stop()
@@ -529,8 +537,8 @@ class base_run_group_manager(object):
             self.outfile.close()
             self.outfile = None
         if self.logfile:
-            self.logfile.close()
-            self.logfile = None
+            self.logfile.flush() # Write what we have, bute capture any output afterwards.
+
         self.current_test = None
         self.current_device = None
 
@@ -550,13 +558,21 @@ class base_run_group_manager(object):
             self.session_results[self.current_device]['tests'][self.current_test]['outfile'] = outfile
 
     def _start_logfile(self, logfile):
+        if not len(logfile): # We never stop logging during testing.
+            return
         if self.logfile:
             self.logfile.close()
         self.logfile = None
-        if len(logfile):
+        # If it's the first, take any log messages that was before hand.
+        if self.logfile == self._pre_logfile:
+            self._pre_logfile.close()
+            shutil.move(self._pre_logfile.name, logfile)
+            self._pre_logfile = None
+            self.logfile = open(logfile, "a")
+        else:
             self.logfile = open(logfile, "w")
-            self.files += [logfile]
-            self.session_results[self.current_device]['tests'][self.current_test]['logfile'] = logfile
+        self.files += [logfile]
+        self.session_results[self.current_device]['tests'][self.current_test]['logfile'] = logfile
 
     def _test_status(self, args):
         args = args.split(' ')
@@ -572,8 +588,7 @@ class base_run_group_manager(object):
             self.outfile.close()
             self.outfile = None
         if self.logfile:
-            self.logfile.close()
-            self.logfile = None
+            self.logfile.flush() # Write what we have, but capture anything until the next test starts
 
     def _dev_status(self, passfail):
         self.session_results[self.current_device]['tests'][self.current_test]['passfail'] = passfail
@@ -597,8 +612,30 @@ class base_run_group_manager(object):
 
     def _store_value(self, name, value):
         if not self.current_device or not self.current_test:
-            return
-        test_dict = self.session_results[self.current_device]['tests'][self.current_test]
+            context = self.context
+            # If this is an error code, this could be useful in the DB.
+            if not len(context.devices) or not len(self.context.tests_group.tests):
+                return
+            # These are DB devices, but the UUID and order should be the same.
+
+            # Ok, so this is before/after the tests are run, so put in for first device
+            current_device = context.devices[0].uuid
+
+            # Use last test that ran
+            tests_dict = self.session_results[current_device]['tests']
+            current_test = None
+            for test in self.context.tests_group.tests:
+                if tests_dict[test.name]['logfile']:
+                    current_test = test.name
+                else:
+                    break
+            if not current_test:
+                # Just use first test
+                current_test = self.context.tests_group.tests[0].name
+        else:
+            current_device = self.current_device
+            current_test = self.current_test
+        test_dict = self.session_results[current_device]['tests'][current_test]
         test_dict.setdefault("stored_values", {})
         test_dict["stored_values"][name] = value
 
@@ -613,9 +650,41 @@ class base_run_group_manager(object):
         return self.frozen and self.live
 
     def process_line(self, line):
+        def line_is_log(s):
+            return len(s) > 22 and \
+               s[2] == '/' and \
+               s[5] == ' ' and \
+               s[8] == ':' and \
+               s[22] == '['
+        def process_log_line(l):
+            try:
+                #23 = len("25/01 10:51:47.241291 [")
+                s = l.index(' ', 24)
+                s += 1
+                e = l.index(':', s)
+                payload = l[e + 2:]
+                token = l[s:e]
+            except:
+                token = ""
+            if token == "ERROR":
+                self.error_line(l)
+                self._logger.error(payload)
+            elif token == "WARN":
+                self.warning_line(l)
+            else:
+                self.info_line(l)
+
+            if self.logfile:
+                self.logfile.write(l)
+
         if not self.live:
             if isinstance(line, bytes) and line.startswith(_IPC_CMD + b"START_TESTS"):
                 self.live = True
+            if self.logfile:
+                if isinstance(line, bytes):
+                    line = line.decode(errors='replace')
+                if line_is_log(line):
+                    process_log_line(line)
             return True
         if isinstance(line, bytes) and line.startswith(_IPC_CMD):
             line = line[len(_IPC_CMD):].strip()
@@ -634,39 +703,12 @@ class base_run_group_manager(object):
         else:
             if isinstance(line, bytes):
                 line = line.decode(errors='replace')
-            ansi = None
-            if len(line) > 22 and \
-               line[2] == '/' and \
-               line[5] == ' ' and \
-               line[8] == ':' and \
-               line[22] == '[':
-                try:
-                    #23 = len("25/01 10:51:47.241291 [")
-                    s = line.index(' ', 24)
-                    s += 1
-                    e = line.index(':', s)
-                    token = line[s:e]
-                except:
-                    token = ""
-                ansi = None
-                if token == "ERROR":
-                    ansi = _ANSI_ERR
-                    self.error_line(line)
-                elif token == "WARN":
-                    ansi = _ANSI_WARN
-                    self.warning_line(line)
-                else:
-                    self.info_line(line)
-
-                if self.logfile:
-                    self.logfile.write(line)
-
+            if line_is_log(line):
+                process_log_line(line)
             else:
                 if line.startswith("Good: "):
-                    ansi = _ANSI_GREEN
                     self.good_line(line)
                 elif line.startswith("BAD: "):
-                    ansi = _ANSI_ERR
                     self.bad_line(line)
                 else:
                     self.normal_line(line)
@@ -691,8 +733,16 @@ class base_run_group_manager(object):
 
             self.session_results = {}
 
+            if self._pre_logfile:
+                self._pre_logfile.close()
+                os.unlink(self._pre_logfile.name) # Just to be sure
+
+            self._pre_logfile = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete_on_close=False) # Place to put errors before tests start
+
+            self.logfile = self._pre_logfile
+
             test_results = {'tests' :
-                            dict([( test.name, {'passfail' : False } )
+                            dict([( test.name, {'passfail' : False, 'logfile' : None } )
                             for test in self.context.tests_group.tests])}
 
             for dev in self.context.devices:
@@ -709,10 +759,9 @@ class base_run_group_manager(object):
             return True
 
         except Exception as e:
-            msg = "BAD: FAILED to start: %s\n" % str(e)
-            lib_inf.output_bad("Backtrace:")
-            for line in traceback.format_exc().splitlines():
-                lib_inf.output_bad(line)
+            msg = f"BAD: FAILED to start: {str(e)}\n"
+            lib_inf.error_msg("Backtrace:")
+            crash_lines_to_log(lib_inf.error_msg)
             self.stop()
             self.live = True
             self.process_line(msg)
@@ -720,23 +769,63 @@ class base_run_group_manager(object):
             self.context.release_bus()
             return False
 
-
-    def wait_for_end(self):
-        lib_inf = self._run_group_context_class.lib_inf
-        self.live = False
-        if self.process:
-            self.process.join(4)
-            self.process = None
-            self.context.release_bus()
-
-        self.last_end_time = time.time()
-        self.readonly = True
-
-    def _complete_stop(self):
-        self.test_context.stop_devices()
+    def _clean_after_process(self):
         self.process = None
         self.last_end_time = time.time()
+        # Drain IPC
+        r = select.select([self.stdout_in],[],[], 0.01)
+        while r[0]:
+            self._stdout_in_event(None, None)
+            r = select.select([self.stdout_in],[],[], 0.01)
+        if self.logfile: # Nothing to log any more, the test process is now gone.
+            self.logfile.close()
+            self.logfile = None
         self.context.release_bus()
+        if self._pre_logfile:
+            # Didn't even get to the first test
+            context = self.context
+            if len(context.devices) and len(self.context.tests_group.tests):
+                # These are DB devices, but the UUID and order should be the same.
+                # Put these logs on to first test
+                current_device = context.devices[0].uuid.rstrip('\0')
+                first_test = context.tests_group.tests[0]
+
+                stamp = datetime.datetime.utcnow()
+
+                filename = "%s_%s_%s_%s.log" % (self.test_context.test_group,
+                                              current_device,
+                                              first_test.name,
+                                              str(stamp))
+                filename = filename.replace('/', '_')
+
+                logfilepath = os.path.join(self.test_context.tmp_dir,
+                                       filename)
+
+                shutil.move(self._pre_logfile.name, logfilepath)
+                self._pre_logfile.close()
+                self._pre_logfile = None
+
+                tests_dict = self.session_results[current_device]['tests'][first_test.name]
+                self.files += [logfilepath]
+                tests_dict['logfile'] = logfilepath
+
+
+    def wait_for_end(self):
+        if self.process:
+            self.live = False
+            self.process.join(4)
+            self._clean_after_process()
+            self.readonly = True
+
+    def _complete_stop(self):
+        try:
+            self.test_context.stop_devices()
+        except Exception as e:
+            self._logger.error(f"Failed to stop devices. {str(e)}")
+            self._logger.error("Backtrace:")
+            crash_lines_to_log(self._logger.error)
+
+        self._clean_after_process()
         self.live = False # Should already be False, but concurrence means it could have changed before process stopped.
         self.frozen = False
 
@@ -774,7 +863,7 @@ class base_run_group_manager(object):
                             local_file = self.context.db.get_file_to_local(f)
                             values[k] = local_file
                         except Exception as e:
-                            self.process_line("BAD: Failed to load session: %s\n" % str(e))
+                            self.process_line(f"BAD: Failed to load session: {str(e)}\n")
                             self.live = False
                             local_file = None
                     else:
@@ -856,10 +945,9 @@ class default_group_context(base_run_group_context):
             bus_con.ready_devices(self.devices)
             return bus_con.devices
         except Exception as e:
-            self._logger.error("Failed to get devices.")
+            self._logger.error(f"Failed to get devices : {str(e)}")
             self._logger.error("Backtrace:")
-            for line in traceback.format_exc().splitlines():
-                self._logger.error(line)
+            crash_lines_to_log(self._logger.error)
             return []
 
     def stop_devices(self):
