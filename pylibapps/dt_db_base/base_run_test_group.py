@@ -510,7 +510,7 @@ class base_run_group_manager(object):
             try:
                 return self.process_line(line)
             except Exception as e:
-                self._logger.error("LINE PROCESS FAILED")
+                self._logger.error(f"LINE PROCESS FAILED : {str(e)}")
                 crash_lines_to_log(self._logger.error)
         else:
             self._logger.warning("Part line received, but timed out.")
@@ -819,7 +819,13 @@ class base_run_group_manager(object):
         self.readonly = True
 
     def _complete_stop(self):
-        self.test_context.stop_devices()
+        try:
+            self.test_context.stop_devices()
+        except Exception as e:
+            self._logger.error(f"Failed to stop devices. {str(e)}")
+            self._logger.error("Backtrace:")
+            crash_lines_to_log(self._logger.error)
+
         self._clean_after_process()
         self.live = False # Should already be False, but concurrence means it could have changed before process stopped.
         self.frozen = False
@@ -940,7 +946,7 @@ class default_group_context(base_run_group_context):
             bus_con.ready_devices(self.devices)
             return bus_con.devices
         except Exception as e:
-            self._logger.error("Failed to get devices.")
+            self._logger.error(f"Failed to get devices : {str(e)}")
             self._logger.error("Backtrace:")
             crash_lines_to_log(self._logger.error)
             return []
