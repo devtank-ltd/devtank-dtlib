@@ -662,11 +662,13 @@ class base_run_group_manager(object):
                 s = l.index(' ', 24)
                 s += 1
                 e = l.index(':', s)
+                payload = l[e + 2:]
                 token = l[s:e]
             except:
                 token = ""
             if token == "ERROR":
                 self.error_line(l)
+                self._logger.error(payload)
             elif token == "WARN":
                 self.warning_line(l)
             else:
