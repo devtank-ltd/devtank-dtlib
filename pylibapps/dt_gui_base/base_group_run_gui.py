@@ -246,6 +246,7 @@ class base_run_context(object):
     def force_stop(self):
         self.unfreeze_btn.hide()
         self.run_group_man.stop()
+        self.finished()
         self._stop_update()
 
     def on_cancel(self):

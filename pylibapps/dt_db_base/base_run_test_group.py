@@ -811,12 +811,11 @@ class base_run_group_manager(object):
 
 
     def wait_for_end(self):
-        lib_inf = self._run_group_context_class.lib_inf
-        self.live = False
         if self.process:
+            self.live = False
             self.process.join(4)
-        self._clean_after_process()
-        self.readonly = True
+            self._clean_after_process()
+            self.readonly = True
 
     def _complete_stop(self):
         try:
