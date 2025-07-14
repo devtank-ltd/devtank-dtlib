@@ -183,6 +183,7 @@ class base_run_context(object):
         self.update_info_status_icon(self.last_test_result)
 
     def select_testfile(self, select_testfile):
+        self.current_test = select_testfile
         test_list = self.test_list
         selector = test_list.get_selection()
         test_list_store = test_list.get_model()
@@ -294,8 +295,7 @@ class base_run_context(object):
 
     def update_info_status(self, passfail=None):
         """ Updates the test info label on the logger window """
-        if self.run_group_man.current_test is not None:
-            self.current_test = self.run_group_man.current_test
+        if self.current_test is not None:
             current_test_number = 1 + self.tests.index(self.current_test)
             self.info_status_label.set_text(f"({current_test_number}/{len(self.tests)}) {self.current_test}")
             self.info_status_spinner.start()
@@ -415,16 +415,14 @@ class base_run_context(object):
         self.log_text.get_buffer().set_text("")
         self.out_text.get_buffer().set_text("")
 
-        if len(test_iters) and self.current_dev is not None:
+        if len(test_iters) and len(self.run_group_man.session_results):
             self.current_test = test_model[test_iters[0]][0]
-            dev_result = self.run_group_man.session_results.get(self.current_dev, None)
-            if not dev_result:
-                self.current_dev, dev_result = list(self.run_group_man.session_results.items())[0]
-            if self.current_dev:
-                pass_fail = dev_result['tests'][self.current_test].get("passfail")
-                self.run_group_man.load_files(self.current_dev, self.current_test)
-                self.update_info_status(pass_fail)
-                self.update_info_status_icon(pass_fail)
+            self.current_dev, dev_result = list(self.run_group_man.session_results.items())[0]
+            testresults = dev_result['tests'].get(self.current_test)
+            pass_fail = testresults["passfail"] if testresults else False
+            self.run_group_man.load_files(self.current_dev, self.current_test)
+            self.update_info_status(pass_fail)
+            self.update_info_status_icon(pass_fail)
 
 
     def load_session(self, session):
