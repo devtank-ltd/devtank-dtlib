@@ -560,16 +560,16 @@ class base_run_group_manager(object):
     def _start_logfile(self, logfile):
         if not len(logfile): # We never stop logging during testing.
             return
-        if self.logfile:
-            self.logfile.close()
-        self.logfile = None
         # If it's the first, take any log messages that was before hand.
         if self.logfile == self._pre_logfile:
             self._pre_logfile.close()
-            shutil.move(self._pre_logfile.name, logfile)
+            shutil.copy(self._pre_logfile.name, logfile)
+            os.unlink(self._pre_logfile.name)
             self._pre_logfile = None
             self.logfile = open(logfile, "a")
         else:
+            if self.logfile:
+                self.logfile.close()
             self.logfile = open(logfile, "w")
         self.files += [logfile]
         self.session_results[self.current_device]['tests'][self.current_test]['logfile'] = logfile
@@ -737,7 +737,7 @@ class base_run_group_manager(object):
                 self._pre_logfile.close()
                 os.unlink(self._pre_logfile.name) # Just to be sure
 
-            self._pre_logfile = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete_on_close=False) # Place to put errors before tests start
+            self._pre_logfile = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) # Place to put errors before tests start
 
             self.logfile = self._pre_logfile
 
@@ -801,8 +801,9 @@ class base_run_group_manager(object):
                 logfilepath = os.path.join(self.test_context.tmp_dir,
                                        filename)
 
-                shutil.move(self._pre_logfile.name, logfilepath)
                 self._pre_logfile.close()
+                shutil.copy(self._pre_logfile.name, logfilepath)
+                os.unlink(self._pre_logfile.name)
                 self._pre_logfile = None
 
                 tests_dict = self.session_results[current_device]['tests'][first_test.name]
