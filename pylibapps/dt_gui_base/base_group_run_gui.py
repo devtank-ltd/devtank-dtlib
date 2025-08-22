@@ -171,10 +171,11 @@ class base_run_context(object):
             bar.set_fraction(1)
 
         test_list_store = self.test_list.get_model()
-        testfile = test_list_store[0]
-        if not testfile[1]:
-            open_notify_gui(self.context, "First test, no result\nNo Devices?\nHW failure?")
-            testfile[1] = self.context.get_pass_fail_icon_name(False)
+        if test_list_store.iter_n_children(None):
+            testfile = test_list_store[0]
+            if not testfile[1]:
+                open_notify_gui(self.context, "First test, no result\nNo Devices?\nHW failure?")
+                testfile[1] = self.context.get_pass_fail_icon_name(False)
 
         self.update_status_time()
         self._stop_update()
