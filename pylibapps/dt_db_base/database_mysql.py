@@ -22,10 +22,25 @@ class mysql_db_cursor(db_cursor):
 
 
 def _do_raw_connect(db_def):
-    ssl = None
-    ca = db_def.get("ca")
-    if ca:
-        ssl = {"ca": ca }
+    ssl = {}
+    for ssl_info in ["ssl_ca",
+                     "ssl_cert",
+                     "ssl_disabled",
+                     "ssl_key",
+                     "ssl_key_password",
+                     "ssl_verify_cert",
+                     "ssl_verify_identity",
+                     "ssl_cert",
+                     "ssl_disabled",
+                     "ssl_key",
+                     "ssl_key_password",
+                     "ssl_verify_cert",
+                     "ssl_verify_identity"]:
+        val = db_def.get(ssl_info)
+        if val:
+            ssl[ssl_info] = val
+    if len(ssl) == 0:
+        ssl = None
     return pymysql.connect(database=db_def["dbname"],
                            user=db_def["user"],
                            password=db_def["password"],
