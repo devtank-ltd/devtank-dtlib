@@ -24,21 +24,14 @@ class mysql_db_cursor(db_cursor):
 def _do_raw_connect(db_def):
     ssl = {}
     for ssl_info in ["ssl_ca",
+                     "ssl_check_hostname",
+                     "ssl_verify_mode",
                      "ssl_cert",
-                     "ssl_disabled",
                      "ssl_key",
-                     "ssl_key_password",
-                     "ssl_verify_cert",
-                     "ssl_verify_identity",
-                     "ssl_cert",
-                     "ssl_disabled",
-                     "ssl_key",
-                     "ssl_key_password",
-                     "ssl_verify_cert",
-                     "ssl_verify_identity"]:
+                     "ssl_password"]:
         val = db_def.get(ssl_info)
         if val:
-            ssl[ssl_info] = val
+            ssl[ssl_info[4:]] = val
     if len(ssl) == 0:
         ssl = None
     return pymysql.connect(database=db_def["dbname"],
