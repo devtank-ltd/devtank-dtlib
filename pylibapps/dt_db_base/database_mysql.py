@@ -22,11 +22,25 @@ class mysql_db_cursor(db_cursor):
 
 
 def _do_raw_connect(db_def):
+    ssl = {}
+    ssl_args = ("ssl_ca",
+                "ssl_check_hostname",
+                "ssl_verify_mode",
+                "ssl_cert",
+                "ssl_key",
+                "ssl_password")
+    for ssl_info in ssl_args:
+        val = db_def.get(ssl_info)
+        if val:
+            ssl[ssl_info.removeprefix("ssl_")] = val
+    if len(ssl) == 0:
+        ssl = None
     return pymysql.connect(database=db_def["dbname"],
                            user=db_def["user"],
                            password=db_def["password"],
                            host=db_def["host"],
                            port=db_def.get("port", 3306),
+                           ssl=ssl,
                            sql_mode='ANSI_QUOTES',
                            connect_timeout=10)
 
