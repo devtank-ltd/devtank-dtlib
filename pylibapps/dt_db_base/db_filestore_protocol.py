@@ -110,8 +110,18 @@ class smb_transferer(object):
 class sftp_connection(object):
     def __init__(self, file_store_host, db_def):
         import paramiko
+        from packaging.version import Version
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        paramiko_version = Version(paramiko.__version__)
+        self._sftp_get_args = {}
+        if paramiko_version >= Version("3.3.0"):
+            # TODO, upgrade whole code base to Python Logging.
+            print("Able to limit sftp concurrency")
+            self._sftp_get_args["max_concurrent_prefetch_requests"] = 64
+        else:
+            print("WARNING: Unable to limit sftp concurrency")
 
         port = 22
         split_pos = file_store_host.find(':')
@@ -121,7 +131,6 @@ class sftp_connection(object):
 
         username=db_def.get("sftp_user",None)
         password=db_def.get("sftp_password",None)
-        self._chunk_size=db_def.get("sftp_chunk_size",None)
 
         ssh.connect(file_store_host,
                     username=username,
@@ -136,15 +145,7 @@ class sftp_connection(object):
         self.sftp_con.put(filepath, remote_file)
 
     def get(self, remote_file, filepath):
-        if self._chunk_size is None:
-            self.sftp_con.get(remote_file, filepath)
-        else:
-            with self.sftp_con.open(remote_file, "rb") as remote_f, open(filepath, "wb") as local_f:
-                while True:
-                    data = remote_f.read(self._chunk_size)
-                    if not data:
-                        break
-                    local_f.write(data)
+        self.sftp_con.get(remote_file, filepath, **self._sftp_get_args)
 
     def exists(self, path):
         try:

@@ -16,7 +16,7 @@ To move any of these queries from SQLite it is only the time functions to go in 
 
 
 Example of listing failure messages in the last day
-===================================================
+---------------------------------------------------
 
 
 When a test fails, the text it failed with is recorded to the database in the values table.
@@ -33,7 +33,7 @@ The SQLite query is:
     JOIN test_group_entries ON test_group_entries.id = group_entry_id
     JOIN test_group_results ON test_group_results.id = example_dev_test_results.group_result_id
     JOIN test_groups ON test_groups.id = test_group_results.group_id
-    JOIN example_devs ON example_devs.id = example_dev_id 
+    JOIN example_devs ON example_devs.id = example_dev_id
     JOIN tester_machines on tester_machines.id = tester_machine_id
     JOIN example_dev_test_results_values ON example_dev_test_results_values.test_result_id = example_dev_test_results.id
     JOIN `values` ON `values`.id = example_dev_test_results_values.value_id
@@ -54,7 +54,7 @@ Also, we don't want all results ever as the database could be very big, so we ju
 
 
 Example of listing current test groups
-======================================
+--------------------------------------
 
 Though we probably know the name of the test groups in the database, there may be multiple versions of each each with it's own set of results.
 
@@ -81,7 +81,7 @@ If we have the test group ID, say 13, of a test group we know was bad, we can fi
     JOIN example_dev_test_results ON example_dev_test_results.group_result_id = test_group_results.id
     JOIN example_devs ON example_devs.id = example_dev_id
     WHERE test_group_results.group_id = 13
-    
+
 
 Knowing the specific group ID already, we don't need the test_groups table, we can just go straight to the test_group_results with that.
 With the test_group_results table we can then join the device results table example_dev_test_results table.
@@ -90,7 +90,7 @@ Finally we can then join the devices table to result from device ID to serial nu
 
 
 Example of specific device history
-==================================
+----------------------------------
 
 
 Say we have a board/device we know the serial and we want to get the history of it from the DB.
@@ -119,7 +119,7 @@ This gives us the names and times and pass or fail of the tests this board has h
 
 
 Example of test duration times
-==============================
+------------------------------
 
 Some times test times aren't deterministic as there is waits for external factors.
 To find out what the average time taken by all the tests are we could simply do:
@@ -142,7 +142,7 @@ We'd be better asking for an average over a specific period of time. We could of
 
 
 Example of test pass rates
-==========================
+--------------------------
 
 To get the percentage a test passes when it is run you can simply do:
 
@@ -160,7 +160,7 @@ As it's very similar to above, you can average over a specific time window in th
 
 
 Extracting a value stored by test runs
-======================================
+--------------------------------------
 
 
 If you have a specific value taken during testing stored to the database, say "3V3_Rail" and want to see the average of all of the reading of it over the last day, you can do the query:
@@ -179,7 +179,7 @@ We are only interested in "3V3_Rail" and entries over the last day so that's wha
 
 
 Grafana queries
-===============
+---------------
 
 So you have a test called "rail_readings.py" and it reads three power rails, '3V3_Rail', '5V_Rail' and '12V_Rail' and you would like to graph that with Grafana.
 Well first off, you we are going to assume you are using a MySQL backend not a SQLite for this, but it's broadly what we have already done before.
@@ -187,12 +187,12 @@ Well first off, you we are going to assume you are using a MySQL backend not a S
 The key difference is the different UNIX time function and using the Grafana time variables, "$__from", "$__to" and  "$__interval_ms" all in milliseconds.
 
 
-    SELECT FROM_UNIXTIME((time_of_tests - (time_of_tests % ($__interval_ms * 1000))) / 1000000) as 'time', AVG(value_real) AS "Mean of", `values`.name AS value_name FROM test_group_results 
+    SELECT FROM_UNIXTIME((time_of_tests - (time_of_tests % ($__interval_ms * 1000))) / 1000000) as 'time', AVG(value_real) AS "Mean of", `values`.name AS value_name FROM test_group_results
     JOIN example_dev_test_results        ON example_dev_test_results.group_result_id       = test_group_results.id
     JOIN example_dev_test_results_values ON example_dev_test_results_values.test_result_id = example_dev_test_results.id
     JOIN `values`                        ON `values`.id                                    = example_dev_test_results_values.value_id
     JOIN test_group_entries              ON test_group_entries.id                          = example_dev_test_results.group_entry_id
-    WHERE time_of_tests >= ($__from * 1000) AND time_of_tests < ($__to * 1000) AND 
+    WHERE time_of_tests >= ($__from * 1000) AND time_of_tests < ($__to * 1000) AND
           test_group_entries.name = 'rail_readings.py' AND `values`.name IN ('3V3_Rail', '5V_Rail', '12V_Rail')
     GROUP BY time, value_name
     ORDER BY time
