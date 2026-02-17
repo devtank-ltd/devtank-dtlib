@@ -110,8 +110,18 @@ class smb_transferer(object):
 class sftp_connection(object):
     def __init__(self, file_store_host, db_def):
         import paramiko
+        from packaging.version import Version
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        paramiko_version = Version(paramiko.__version__)
+        self._sftp_get_args = {}
+        if paramiko_version >= Version("3.3.0"):
+            # TODO, upgrade whole code base to Python Logging.
+            print("Able to limit sftp concurrency")
+            self._sftp_get_args["max_concurrent_prefetch_requests"] = 64
+        else:
+            print("WARNING: Unable to limit sftp concurrency")
 
         port = 22
         split_pos = file_store_host.find(':')
@@ -135,7 +145,7 @@ class sftp_connection(object):
         self.sftp_con.put(filepath, remote_file)
 
     def get(self, remote_file, filepath):
-        self.sftp_con.get(remote_file, filepath)
+        self.sftp_con.get(remote_file, filepath, **self._sftp_get_args)
 
     def exists(self, path):
         try:
