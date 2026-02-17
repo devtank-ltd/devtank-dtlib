@@ -117,10 +117,9 @@ class sftp_connection(object):
         paramiko_version = Version(paramiko.__version__)
         self._sftp_get_args = {}
         if paramiko_version >= Version("3.3.0"):
-            # TODO, upgrade whole code base to Python Logging.
-            print("Able to limit sftp concurrency")
             self._sftp_get_args["max_concurrent_prefetch_requests"] = 64
         else:
+            # TODO, upgrade whole code base to Python Logging.
             print("WARNING: Unable to limit sftp concurrency")
 
         port = 22
