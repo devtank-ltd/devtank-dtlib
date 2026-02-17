@@ -121,7 +121,6 @@ class sftp_connection(object):
 
         username=db_def.get("sftp_user",None)
         password=db_def.get("sftp_password",None)
-        self._chunk_size=db_def.get("sftp_chunk_size",None)
 
         ssh.connect(file_store_host,
                     username=username,
@@ -136,15 +135,7 @@ class sftp_connection(object):
         self.sftp_con.put(filepath, remote_file)
 
     def get(self, remote_file, filepath):
-        if self._chunk_size is None:
-            self.sftp_con.get(remote_file, filepath)
-        else:
-            with self.sftp_con.open(remote_file, "rb") as remote_f, open(filepath, "wb") as local_f:
-                while True:
-                    data = remote_f.read(self._chunk_size)
-                    if not data:
-                        break
-                    local_f.write(data)
+        self.sftp_con.get(remote_file, filepath)
 
     def exists(self, path):
         try:
