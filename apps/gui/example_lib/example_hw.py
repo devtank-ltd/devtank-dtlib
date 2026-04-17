@@ -44,14 +44,32 @@ class example_dev(base_hw_dev):
         dt_db_base.info_msg("FW serial: " + r)
         return r
 
+    def _fake_adc(self, name, unit, cal, readings):
+        unit_fn = lambda v : round(cal[0] + v * cal[1])
+        min_v = min(readings)
+        max_v = max(readings)
+        avg_v = sum(readings) / len(readings)
+        avg_unit = unit_fn(avg_v)
+        dt_db_base.info_msg(f"ADC {name} cal {cal}")
+        dt_db_base.info_msg(f"ADC {name} {len(readings)} samples")
+        dt_db_base.info_msg(f"ADC {name} min {min_v}/{unit_fn(min_v)}{unit}")
+        dt_db_base.info_msg(f"ADC {name} max {max_v}/{unit_fn(max_v)}{unit}")
+        dt_db_base.info_msg(f"ADC {name} avg {avg_v}/{avg_unit}{unit}")
+        return avg_unit
+
     def read_3v3_rail(self):
-        mV = 3299
-        dt_db_base.info_msg("Read 3.3 rail as %umV" % mV)
+        cal = (0, round(5000 / 4095, 3)) # 5V over 12bit ADC, 0 offset
+        readings = [random.randint(2700, 2704) for _ in range(1000)]
+        mV = self._fake_adc("DUT_3V3", "mv", cal, readings)
+        dt_db_base.info_msg(f"Read 3.3V rail as {mV}mV")
         return mV
 
     def read_current(self):
-        mA = 141
-        dt_db_base.info_msg("Current is %umA" % mA)
+        adc = 289
+        cal = (0, round(2000 / 4095, 3)) # 2A over 12bit ADC, 0 offset
+        readings = [random.randint(285, 295) for _ in range(1000)]
+        mA = self._fake_adc("DUT_CUR", "mA", cal, readings)
+        dt_db_base.info_msg(f"Current is {mA}mA")
         return mA
 
     def read_revision(self):
@@ -108,5 +126,3 @@ class example_bus(base_hw_bus):
     def close(self):
         super().close()
         dt_db_base.info_msg("Closing my bus")
-
-
