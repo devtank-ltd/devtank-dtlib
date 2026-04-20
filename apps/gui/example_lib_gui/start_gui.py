@@ -63,6 +63,25 @@ class _start_double_scan(scan_box_base):
                 self.set_status("Unable to connect to DB.")
                 return
 
+        if serial_number.startswith("freeze_on_fail:"):
+            data = serial_number.replace("freeze_on_fail:", "").strip().upper()
+            freeze_on_fail = data == "ON"
+            context.args["freeze_on_fail"] = freeze_on_fail
+            self.set_status("Freeze On Fail : %s" % ("ON" if freeze_on_fail else "OFF"))
+            return
+
+        if serial_number.startswith("arguments_override:"):
+            arguments = serial_number.replace("arguments_override:", "").strip()
+            try:
+                arguments = json.loads(arguments)
+            except:
+                self.set_status("Invalid arguments")
+                return
+
+            self.context.custom_args = arguments
+            self.set_status("Custom arguments set")
+            return
+
         selected_group = context.db.get_group(serial_number)
         if selected_group:
             self.selected_group = selected_group
