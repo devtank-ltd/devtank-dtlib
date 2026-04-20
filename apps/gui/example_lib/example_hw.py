@@ -1,4 +1,5 @@
 import os
+import time
 import random
 import dt_db_base
 
@@ -34,14 +35,15 @@ class example_dev(base_hw_dev):
             dt_db_base.error_msg("HW ID can not be read without firmware.")
             r = False
         else:
-            dt_db_base.info_msg("HW ID: " + self._hw_id)
+            dt_db_base.info_msg(f'CARD1 : UART0 << "GET_HW_ID"')
+            dt_db_base.info_msg(f'CARD1 : UART0 >> "HW ID: {self._hw_id}"')
             self._uuid = self._hw_id
             r = True
         self.exact_check(r, True, CHECK_DESCS.FIRMWARE_HW_ID)
 
     def read_serial(self):
         r = self._fw
-        dt_db_base.info_msg("FW serial: " + r)
+        dt_db_base.info_msg(f'CARD1 : UART0 >> "{r}"')
         return r
 
     def _fake_adc(self, name, unit, cal, readings):
@@ -50,18 +52,17 @@ class example_dev(base_hw_dev):
         max_v = max(readings)
         avg_v = sum(readings) / len(readings)
         avg_unit = unit_fn(avg_v)
-        dt_db_base.info_msg(f"ADC {name} cal {cal}")
-        dt_db_base.info_msg(f"ADC {name} {len(readings)} samples")
-        dt_db_base.info_msg(f"ADC {name} min {min_v}/{unit_fn(min_v)}{unit}")
-        dt_db_base.info_msg(f"ADC {name} max {max_v}/{unit_fn(max_v)}{unit}")
-        dt_db_base.info_msg(f"ADC {name} avg {avg_v}/{avg_unit}{unit}")
+        dt_db_base.info_msg(f'CARD1 : ADC "{name}" cal {cal}')
+        dt_db_base.info_msg(f'CARD1 : ADC "{name}" {len(readings)} samples')
+        dt_db_base.info_msg(f'CARD1 : ADC "{name}" min {min_v}/{unit_fn(min_v)}{unit}')
+        dt_db_base.info_msg(f'CARD1 : ADC "{name}" max {max_v}/{unit_fn(max_v)}{unit}')
+        dt_db_base.info_msg(f'CARD1 : ADC "{name}" avg {avg_v}/{avg_unit}{unit}')
         return avg_unit
 
     def read_3v3_rail(self):
         cal = (0, round(5000 / 4095, 3)) # 5V over 12bit ADC, 0 offset
         readings = [random.randint(2700, 2704) for _ in range(1000)]
         mV = self._fake_adc("DUT_3V3", "mv", cal, readings)
-        dt_db_base.info_msg(f"Read 3.3V rail as {mV}mV")
         return mV
 
     def read_current(self):
@@ -69,36 +70,34 @@ class example_dev(base_hw_dev):
         cal = (0, round(2000 / 4095, 3)) # 2A over 12bit ADC, 0 offset
         readings = [random.randint(285, 295) for _ in range(1000)]
         mA = self._fake_adc("DUT_CUR", "mA", cal, readings)
-        dt_db_base.info_msg(f"Current is {mA}mA")
         return mA
 
     def read_revision(self):
+        dt_db_base.info_msg('CARD1 : IO REV_GPIO_0')
+        dt_db_base.info_msg('CARD1 : IO 5 "REV_GPIO_0" = 1')
+        dt_db_base.info_msg('CARD1 : IO REV_GPIO_1')
+        dt_db_base.info_msg('CARD1 : IO 6 "REV_GPIO_1" = 0')
+        dt_db_base.info_msg('CARD1 : IO REV_GPIO_2')
+        dt_db_base.info_msg('CARD1 : IO 7 "REV_GPIO_2" = 1')
         return 101
 
-    @property
-    def write_enable(self):
-        return self._write_enable
-
-    @write_enable.setter
-    def write_enable(self, v):
-        if self._write_enable == v:
-            dt_db_base.warning_msg("Firmware lock already in requested state.")
-        self._write_enable = v
-
     def send_firmware(self, fw):
-        if not self._write_enable:
-            dt_db_base.error_msg("Firmware locked, but upload attempted.")
-            r = False
-        else:
-            dt_db_base.info_msg("Uploading firmware")
-            with open(fw) as f:
-                self._fw = f.readline().strip()
-            dt_db_base.info_msg("Firmware loaded")
-            r = True
-        self.exact_check(r, True, CHECK_DESCS.FIRMWARE_PROGRAM)
+        dt_db_base.info_msg("Uploading firmware")
+        with open(fw) as f:
+            self._fw = f.readline().strip()
+        dt_db_base.info_msg("CARD1 : IO BOOT_GPIO = 1")
+        self.reset()
+        for n in range(5):
+            dt_db_base.info_msg("CARD1 : UART0 << XXXXXXXXXXXXXXXX")
+            time.sleep(0.1)
+        dt_db_base.info_msg("CARD1 : IO BOOT_GPIO = 0")
+        dt_db_base.info_msg("Firmware loaded")
+        return True
 
     def reset(self):
-        dt_db_base.info_msg("Device reset")
+        dt_db_base.info_msg("CARD1 : IO RESET_GPIO = 0")
+        time.sleep(0.1)
+        dt_db_base.info_msg("CARD1 : IO RESET_GPIO = 1")
 
 
 ## Open connection to a Example bus.
