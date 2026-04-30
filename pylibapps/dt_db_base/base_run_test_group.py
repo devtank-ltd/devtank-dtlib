@@ -374,7 +374,12 @@ def _thread_test(test_context):
                     lib_inf.error_msg("Backtrace:")
                     crash_lines_to_log(lib_inf.error_msg)
                     test_context.script_crash(name)
-                    full_stop = True
+
+                    if args.get("freeze_on_fail", False):
+                        lib_inf.output_normal(">>>>FROZEN UNTIL USER CONTINUES<<<<")
+                        test_context.freeze()
+
+                    full_stop = args.get("exit_on_fail", False)
 
                 post_dev_uuid = dev.uuid.rstrip('\0')
                 if dev_uuid != post_dev_uuid:
