@@ -23,6 +23,12 @@ def get_batch_folders(file_id):
     return r
 
 
+# Windows services have filenames limited by Windows file systems.
+def get_win_safe_filename(filename):
+    return "".join(
+        map(lambda x: "_" if x in ':*/\\?<>"|' else x, filename))
+
+
 class smb_transferer(object):
     protocol_id=2
     def __init__(self):
@@ -78,9 +84,8 @@ class smb_transferer(object):
         self._cache_con = {}
 
     def _safe_name(self, filename):
-        filename = "".join(
-            map(lambda x: "_" if x in ':*/\\?<>"|' else x, filename))
-        return urllib.pathname2url(filename) # Spaces are safe like this
+        # urllib makes spaces safe too
+        return urllib.pathname2url(get_win_safe_filename(filename))
 
     def upload(self, filepath, file_id):
         filename = os.path.basename(filepath)
@@ -216,15 +221,20 @@ class sftp_transferer(object):
             self._con = sftp_connection(file_store_host, self._db_def)
         self._cache_con[cache_key] = [self._con, time.time()]
 
-    def _get_remote_name(self, filepath, file_id, upload=False, schema=2):
-        filename = os.path.basename(filepath)
+    def _has_windows_limits(self):
+        transport = self._con.ssh.get_transport()
+        remote_version = transport.remote_version.lower()
+        return "azure" in remote_version or \
+               "cygwin" in remote_version or \
+               "windows" in remote_version
+
+    def _get_remote_name(self, filename, file_id, upload=False, schema=2):
         remote_filename = "%i.%s" % (file_id, filename)
         if schema == 2:
             folders = get_batch_folders(file_id)
         elif schema == 1:
             folders = get_hash_folders(remote_filename)
         elif schema == 0:
-            filename = os.path.basename(filepath)
             return os.path.join(self._base_folder, remote_filename)
         else:
             raise Exception("Unknown file path schema.")
@@ -245,16 +255,22 @@ class sftp_transferer(object):
         self._cache_con = {}
 
     def upload(self, filepath, file_id):
-        remote_filepath = self._get_remote_name(filepath, file_id, True)
+        filename = os.path.basename(filepath)
+        if self._has_windows_limits():
+            filename = get_win_safe_filename(filename)
+        remote_filepath = self._get_remote_name(filename, file_id, True)
         self._con.put(filepath, remote_filepath)
 
     def download(self, filepath, file_id, mod_time):
+        filename = os.path.basename(filepath)
+        if self._has_windows_limits():
+            filename = get_win_safe_filename(filename)
         # Try remote paths, newest schema to oldest.
-        remote_filepath = self._get_remote_name(filepath, file_id)
+        remote_filepath = self._get_remote_name(filename, file_id)
         if not self._con.exists(remote_filepath):
-            remote_filepath = self._get_remote_name(filepath, file_id, schema=1)
+            remote_filepath = self._get_remote_name(filename, file_id, schema=1)
             if not self._con.exists(remote_filepath):
-                remote_filepath = self._get_remote_name(filepath, file_id, schema=0)
+                remote_filepath = self._get_remote_name(filename, file_id, schema=0)
 
         self._con.get(remote_filepath, filepath)
         os.utime(filepath, (mod_time, mod_time))
