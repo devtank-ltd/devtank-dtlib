@@ -209,6 +209,9 @@ class sftp_transferer(object):
                 cache_entry[1] = now
                 self._con = cache_entry[0]
                 self._base_folder = file_store_folder
+                self._has_windows_limits = "azure" in remote_version or \
+                       "cygwin" in remote_version or \
+                       "windows" in remote_version
                 return
             else:
                 self._cache_con.pop(cache_key)
