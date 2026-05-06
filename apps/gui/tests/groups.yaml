@@ -7,7 +7,7 @@
             tests:
             [
                 [ "basics.py",  { "expected_mV" : 3300, "expected_mA" : 150, "hw_rev" : 101 } ],
-                [ "program.py", { "firmware" : "fw.img", "serial" : "Hello World", "write_enable" : True } ],
+                [ "program.py", { "firmware" : "fw.img", "serial" : "Hello World" } ],
                 [ "read_id.py", {} ]
             ]
         },
@@ -17,9 +17,9 @@
             note : "Hand written version",
             tests:
             [
-                [ "basics.py",  { "expected_mV" : 5000, "expected_mA" : 2000,  "hw_rev" : 102, "exit_on_fail" : False} ],
-                [ "program.py", { "firmware" : "fw.img", "serial" : "Hello New World", "write_enable" : False, "exit_on_fail" : False } ],
-                [ "read_id.py", { "exit_on_fail" : False} ]
+                [ "basics.py",  { "expected_mV" : 5000, "expected_mA" : 2000,  "hw_rev" : 102 } ],
+                [ "program.py", { "firmware" : "fw.img", "serial" : "Hello New World" } ],
+                [ "read_id.py", {} ]
             ]
         },
     ]

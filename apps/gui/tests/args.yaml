@@ -18,6 +18,4 @@
                    'desc' : 'Firmware for DUT' },
     "serial": { 'desc' : 'Serial data expected',
                 'type' : 'text'},
-    "write_enable" : { 'type' : 'bool',
-                       'desc' : "Value to set to enable firmware upload." }
 }

@@ -20,11 +20,10 @@ from example_lib import CHECK_DESCS
 
 firmware_file = args["firmware"]
 expected_serial = args["serial"]
-write_enable = args["write_enable"]
 
 output_normal("Programming device.")
-dev.write_enable = write_enable
-dev.send_firmware(firmware_file)
+r = dev.send_firmware(firmware_file)
+exact_check(r, True, CHECK_DESCS.FIRMWARE_PROGRAM)
 dev.reset()
 
 output_normal("Reading device serial for boot message.")
