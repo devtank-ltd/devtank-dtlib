@@ -191,6 +191,7 @@ class sftp_transferer(object):
         self._con = None
         self._base_folder = None
         self._cache_con = {}
+        self._has_windows_limits = False
 
     def init(self, file_store_host, file_store_folder):
         if file_store_host.lower() == "localhost":
@@ -219,14 +220,13 @@ class sftp_transferer(object):
             self._con = local_connection()
         else:
             self._con = sftp_connection(file_store_host, self._db_def)
-        self._cache_con[cache_key] = [self._con, time.time()]
+            transport = self._con.ssh.get_transport()
+            remote_version = transport.remote_version.lower()
+            self._has_windows_limits = "azure" in remote_version or \
+                   "cygwin" in remote_version or \
+                   "windows" in remote_version
 
-    def _has_windows_limits(self):
-        transport = self._con.ssh.get_transport()
-        remote_version = transport.remote_version.lower()
-        return "azure" in remote_version or \
-               "cygwin" in remote_version or \
-               "windows" in remote_version
+        self._cache_con[cache_key] = [self._con, time.time()]
 
     def _get_remote_name(self, filename, file_id, upload=False, schema=2):
         remote_filename = "%i.%s" % (file_id, filename)
@@ -256,14 +256,14 @@ class sftp_transferer(object):
 
     def upload(self, filepath, file_id):
         filename = os.path.basename(filepath)
-        if self._has_windows_limits():
+        if self._has_windows_limits:
             filename = get_win_safe_filename(filename)
         remote_filepath = self._get_remote_name(filename, file_id, True)
         self._con.put(filepath, remote_filepath)
 
     def download(self, filepath, file_id, mod_time):
         filename = os.path.basename(filepath)
-        if self._has_windows_limits():
+        if self._has_windows_limits:
             filename = get_win_safe_filename(filename)
         # Try remote paths, newest schema to oldest.
         remote_filepath = self._get_remote_name(filename, file_id)
