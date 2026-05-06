@@ -67,7 +67,8 @@ class _start_double_scan(scan_box_base):
             data = serial_number.replace("freeze_on_fail:", "").strip().upper()
             freeze_on_fail = data == "ON"
             context.args["freeze_on_fail"] = freeze_on_fail
-            self.set_status("Freeze On Fail : %s" % ("ON" if freeze_on_fail else "OFF"))
+            status = "ON" if freeze_on_fail else "OFF"
+            self.set_status(f"Freeze On Fail: {status}")
             return
 
         if serial_number.startswith("arguments_override:"):
