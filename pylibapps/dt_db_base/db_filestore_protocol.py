@@ -199,6 +199,13 @@ class sftp_transferer(object):
             if not con.exists(file_store_folder):
                 con.mkdir(file_store_folder)
 
+    def _setup_has_windows_limits(self):
+        transport = self._con.ssh.get_transport()
+        remote_version = transport.remote_version.lower()
+        self._has_windows_limits = "azure" in remote_version or \
+               "cygwin" in remote_version or \
+               "windows" in remote_version
+
     def open(self, file_store_host, file_store_folder):
         cache_key = (file_store_host, file_store_folder)
         cache_entry = self._cache_con.get(cache_key, None)
@@ -209,9 +216,7 @@ class sftp_transferer(object):
                 cache_entry[1] = now
                 self._con = cache_entry[0]
                 self._base_folder = file_store_folder
-                self._has_windows_limits = "azure" in remote_version or \
-                       "cygwin" in remote_version or \
-                       "windows" in remote_version
+                self._setup_has_windows_limits()
                 return
             else:
                 self._cache_con.pop(cache_key)
@@ -223,11 +228,7 @@ class sftp_transferer(object):
             self._con = local_connection()
         else:
             self._con = sftp_connection(file_store_host, self._db_def)
-            transport = self._con.ssh.get_transport()
-            remote_version = transport.remote_version.lower()
-            self._has_windows_limits = "azure" in remote_version or \
-                   "cygwin" in remote_version or \
-                   "windows" in remote_version
+            self._setup_has_windows_limits()
 
         self._cache_con[cache_key] = [self._con, time.time()]
 
