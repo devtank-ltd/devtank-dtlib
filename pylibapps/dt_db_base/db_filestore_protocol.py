@@ -233,7 +233,7 @@ class sftp_transferer(object):
         self._cache_con[cache_key] = [self._con, time.time()]
 
     def _get_remote_name(self, filename, file_id, upload=False, schema=2):
-        remote_filename = "%i.%s" % (file_id, filename)
+        remote_filename = f"{file_id}.{filename}"
         if schema == 2:
             folders = get_batch_folders(file_id)
         elif schema == 1:
