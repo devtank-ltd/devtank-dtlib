@@ -60,7 +60,7 @@ class smb_transferer(object):
         cache_entry = self._cache_con.get(cache_key, None)
 
         if cache_entry:
-            now = time.time()
+            now = time.monotonic()
             if cache_entry[1] - now < 60 * 5:
                 cache_entry[1] = now
                 self._ctx = cache_entry[0]
@@ -75,7 +75,7 @@ class smb_transferer(object):
         self._host = file_store_host
         self._base_folder = file_store_folder
 
-        self._cache_con[cache_key] = [self._ctx, time.time()]
+        self._cache_con[cache_key] = [self._ctx, time.monotonic()]
 
     def clean(self):
         self._ctx = None
@@ -211,8 +211,8 @@ class sftp_transferer(object):
         cache_entry = self._cache_con.get(cache_key, None)
 
         if cache_entry:
-            now = time.time()
-            if cache_entry[1] - now < 60 * 5:
+            now = time.monotonic()
+            if cache_entry[1] - now < self._db_def.get("sftp_cachelife", 60):
                 cache_entry[1] = now
                 self._con = cache_entry[0]
                 self._base_folder = file_store_folder
@@ -230,7 +230,7 @@ class sftp_transferer(object):
             self._con = sftp_connection(file_store_host, self._db_def)
             self._setup_has_windows_limits()
 
-        self._cache_con[cache_key] = [self._con, time.time()]
+        self._cache_con[cache_key] = [self._con, time.monotonic()]
 
     def _get_remote_name(self, filename, file_id, upload=False, schema=2):
         remote_filename = f"{file_id}.{filename}"
