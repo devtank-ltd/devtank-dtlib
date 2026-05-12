@@ -23,7 +23,7 @@ from .db_tester import db_tester_machine
 
 
 class tester_database(object):
-    def __init__(self, db, sql, work_folder, db_def=None):
+    def __init__(self, db, sql, work_folder, db_def={}):
         self.db = db
         self.sql = sql
         sql.setup(db)
