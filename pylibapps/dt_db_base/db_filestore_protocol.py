@@ -142,8 +142,22 @@ class sftp_connection(object):
                     port=port,
                     allow_agent=False if password else True,
                     look_for_keys=False if password else True)
+
+        cachelife = db_def.get("sftp_cachelife", 60)
+
+        transport = ssh.get_transport()
+        transport.set_keepalive(cachelife/2)
+
         self.ssh = ssh
         self.sftp_con = ssh.open_sftp()
+
+    def is_active(self):
+        try:
+            transport = self.ssh.get_transport()
+            return transport.is_active()
+        except Exception as e:
+            print(f"Failed to check SSH connected : {e}")
+            return False
 
     def put(self, filepath, remote_file):
         self.sftp_con.put(filepath, remote_file)
@@ -167,6 +181,9 @@ class sftp_connection(object):
 
 
 class local_connection(object):
+
+    def is_active(self):
+        return True
 
     def put(self, filepath, remote_file):
         shutil.copy(filepath, remote_file)
@@ -218,12 +235,14 @@ class sftp_transferer(object):
             if cache_entry[1] - now < self._db_def.get("sftp_cachelife", 60):
                 cache_entry[1] = now
                 self._con = cache_entry[0]
-                self._base_folder = file_store_folder
-                self._setup_has_windows_limits()
-                return
-            else:
-                self._cache_con.pop(cache_key)
-                cache_entry[0].close()
+                # So it was last obtain in the given cache time, but is it still good?
+                if self._con.is_active():
+                    self._base_folder = file_store_folder
+                    self._setup_has_windows_limits()
+                    return
+                self._con = None
+            self._cache_con.pop(cache_key)
+            cache_entry[0].close()
 
         self._base_folder = file_store_folder
 
