@@ -56,7 +56,7 @@ define COVERAGE_TEST
     $(COVERAGERUN) --config $(1) testers_result $${TESTER_ID} 0
 endef
 
-coverage_sqlite: default
+coverage: default
 	rm -rf /tmp/dt_test.db /tmp/dt_test_files
 	python3-coverage erase
 	echo "{ type: sqlite, filename: /tmp/dt_test.db, db_files: /tmp/dt_test_files }" > /tmp/dt_test.yaml
@@ -74,7 +74,7 @@ coverage_mysql: default config_mysql_test.yaml
 	python3-coverage html
 	if [ "$$NOBROWSER" != "1" ]; then sensible-browser htmlcov/index.html; fi
 
-coverage: default config_mysql_test.yaml
+coverage_mysql_full: default config_mysql_test.yaml
 	mkdir -p /tmp/dtlib/dbfiles
 	rm -rf /tmp/dtlib/dbfiles/* /tmp/dt_test.db /tmp/dt_test_files
 	python3-coverage erase
